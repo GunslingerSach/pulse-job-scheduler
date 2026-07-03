@@ -1,174 +1,102 @@
 # Pulse — Distributed Job Scheduler
 
-A production-ready distributed background job scheduling platform built with **FastAPI**, **PostgreSQL** (row-locking via `SELECT FOR UPDATE SKIP LOCKED`), **asyncio**, and a real-time **React + Tailwind CSS** monitoring dashboard.
+## 📖 Abstract
+
+**Pulse** is a production-ready distributed background job scheduling platform built to execute, monitor, and retry background jobs across horizontal worker nodes. 
+
+Instead of relying on heavy external message brokers like RabbitMQ or Redis, Pulse uses PostgreSQL row-level concurrency locking (`SELECT ... FOR UPDATE SKIP LOCKED`) to guarantee zero duplicate execution and exactly-once job dispatching even under high concurrency. 
+
+### Key Capabilities
+- **⚡ Atomic Concurrency Engine:** PostgreSQL index-scanned row locking prevents race conditions and duplicate job claims across distributed worker processes.
+- **🛠️ Standalone Worker Process Fleet:** Modular multi-process worker architecture (`app.worker.runner`) with API-key authentication, real-time load reporting, and graceful drain-on-shutdown.
+- **🔄 Fault Tolerance & Dead Letter Queue:** Configurable retry policies (Fixed, Linear, Exponential backoff). Jobs exhausting their retry budget automatically move to an interactive Dead Letter Queue (DLQ) with one-click replay.
+- **🕒 Scheduled & Recurring Cron Jobs:** Full ISO 8601 future scheduling and cron expressions (`0 * * * *`) powered by `croniter`.
+- **📊 Real-Time Web Console:** Dark-themed React + Tailwind CSS dashboard providing live monitoring of queues, active worker nodes, terminal execution logs, and system throughput.
 
 ---
 
-## 🏗️ Architecture Overview
+## 📚 Technical Documentation
 
-```mermaid
-flowchart TB
-    subgraph Clients["Frontend & API Clients"]
-        Dashboard["React Dashboard (Vite + Tailwind)"]
-        APIClient["External REST API Consumers"]
-    end
+Full architectural specifications, API schemas, and engineering rationale are organized inside the `docs/` folder:
 
-    subgraph Server["FastAPI Backend (Stateless & Horizontally Scalable)"]
-        Auth["JWT Auth Layer"]
-        REST["REST API (Projects, Queues, Jobs, DLQ, Stats)"]
-        WorkerAPI["Worker API (x-api-key Authentication)"]
-        Loop["Background Scheduler Loop (Job Promotion & Worker Reaping)"]
-    end
-
-    subgraph Workers["Distributed Worker Fleet (Independent OS Processes)"]
-        W1["Worker Process 1 (concurrency=5)"]
-        W2["Worker Process 2 (concurrency=5)"]
-        Wn["Worker Process N"]
-    end
-
-    DB[("PostgreSQL Database\nAtomic Row-Locking via FOR UPDATE SKIP LOCKED")]
-
-    Dashboard -->|JWT Bearer| Auth
-    Dashboard -->|JWT Bearer| REST
-    APIClient -->|JWT Bearer| REST
-    W1 -->|x-api-key| WorkerAPI
-    W2 -->|x-api-key| WorkerAPI
-    Wn -->|x-api-key| WorkerAPI
-
-    REST --> DB
-    WorkerAPI --> DB
-    Loop --> DB
-```
+| Document | Description |
+|---|---|
+| [`docs/architecture.md`](docs/architecture.md) | High-level system topology, lifecycle diagrams, and concurrency design |
+| [`docs/api-documentation.md`](docs/api-documentation.md) | REST API endpoints, request/response schemas, and error codes |
+| [`docs/automated-tests.md`](docs/automated-tests.md) | Overview of the 14 automated unit/integration tests running against live PostgreSQL |
+| [`docs/design-decisions.md`](docs/design-decisions.md) | Deep dive into engineering tradeoffs, database locking semantics, and security choices |
+| [`docs/er-diagram.md`](docs/er-diagram.md) | Entity-Relationship schema definitions (`projects`, `queues`, `jobs`, `workers`, `dead_letter_jobs`) |
 
 ---
 
-## ✨ Key Features
-
-- **⚡ Atomic Concurrency Engine:** Replaces complex external brokers (RabbitMQ/Redis) with PostgreSQL-native `SELECT ... FOR UPDATE SKIP LOCKED`. Guarantees exactly-once execution and zero duplicate claims even under high concurrency.
-- **🛠️ Distributed Worker Fleet:** Independent background worker processes (`app.worker.runner`) connect from any machine via API keys. Features automatic heartbeat reporting, real-time load tracking, and graceful drain-on-shutdown (`SIGINT`/`SIGTERM`).
-- **🎯 Dynamic Queue Controls:** Configure per-queue concurrency ceilings, priority weighting, pause/resume toggles, and attach modular retry policies.
-- **🔄 Advanced Retry & Dead Letter Queue (DLQ):** Supports customizable Fixed, Linear, and Exponential backoff curves. Jobs exhausting their retry budget automatically transition to an interactive Dead Letter Queue with full execution timelines and one-click replay.
-- **🕒 Cron & Recurring Schedules:** Full ISO 8601 scheduled jobs and cron expressions (`0 * * * *`) powered by `croniter` with automatic occurrence materialization.
-- **📊 Real-Time Premium Dashboard:** Dark-themed responsive web console built with React, Vite, and Tailwind CSS for live monitoring of workers, queues, job logs, and throughput analytics.
-
----
-
-## 🚀 Step-by-Step Setup Instructions
+## 🛠️ Step-by-Step Setup Instructions
 
 ### Prerequisites
-- **Python 3.11+** (Tested on Python 3.13)
+- **Python 3.11+**
 - **Node.js 18+**
-- **PostgreSQL 14+** (Local instance or [Supabase](https://supabase.com))
+- **PostgreSQL 14+** (Local instance or cloud hosted via [Supabase](https://supabase.com))
 
 ---
 
-### 1. Database Configuration
-Create your PostgreSQL database or grab your connection URL from Supabase (**Project Settings $\rightarrow$ Database $\rightarrow$ URI Connection String**):
+### 1. Database Setup
+Obtain your PostgreSQL connection URI. If using **Supabase**, enable the **Connection Pooler (Session Mode)** under **Project Settings $\rightarrow$ Database**:
 ```text
-postgresql+psycopg2://postgres:password@db.your-project.supabase.co:5432/postgres
+postgresql+psycopg2://postgres.project_ref:password@aws-1-region.pooler.supabase.com:5432/postgres
 ```
 
 ---
 
-### 2. Backend Setup
-Navigate to the `backend` directory, create a virtual environment, install dependencies, and configure environment variables:
-
+### 2. Backend API Server Setup
 ```bash
 cd backend
 
-# Create and activate virtual environment (Windows PowerShell)
+# Create and activate Python virtual environment
 python -m venv venv
+# On Windows PowerShell:
 .\venv\Scripts\activate
-
-# On Linux/macOS:
-# python3 -m venv venv && source venv/bin/activate
+# On macOS/Linux:
+# source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
-```
 
-Create a `.env` file inside `backend/` (`backend/.env`):
-```ini
-DATABASE_URL=postgresql+psycopg2://postgres:password@your-db-host:5432/postgres
-JWT_SECRET=your-secure-jwt-secret-key
-```
+# Set database connection variable
+export DATABASE_URL="postgresql+psycopg2://postgres:password@localhost:5432/postgres"
 
-Start the FastAPI backend server:
-```bash
+# Start the API server
 uvicorn app.main:app --reload --port 8000
 ```
-*Note: Database tables and indexes are automatically created on server startup (`Base.metadata.create_all`). Interactive Swagger API documentation is available at `http://localhost:8000/docs`.*
+*Note: Database tables and indexes are created automatically upon startup. Interactive API docs are served at `http://localhost:8000/docs`.*
 
 ---
 
-### 3. Launching Background Workers
-Open a new terminal tab and launch one or more background worker processes. Retrieve your Project API Key from the dashboard's **Workers** page (`http://localhost:5173/workers`):
-
+### 3. Start Background Worker Node(s)
+Open a new terminal tab and start a worker process against the API:
 ```bash
 cd backend
 .\venv\Scripts\activate
 
 python -m app.worker.runner --api-base http://localhost:8000 --api-key <YOUR_PROJECT_API_KEY> --name worker-1 --concurrency 5
 ```
-*Tip: You can open multiple terminals and run `--name worker-2`, `--name worker-3` to simulate a distributed multi-node cluster!*
-
-#### Registering Custom Job Handlers
-To execute custom job payloads, register handlers in `backend/app/worker/handlers.py`:
-```python
-from app.worker.handlers import handler
-
-@handler("send_email")
-async def send_email_handler(payload: dict) -> dict:
-    recipient = payload.get("email")
-    # Execute custom logic...
-    return {"status": "sent", "recipient": recipient}
-```
+*Retrieve your `<YOUR_PROJECT_API_KEY>` from the dashboard's **Workers** page.*
 
 ---
 
 ### 4. Frontend Dashboard Setup
-Open a new terminal tab, install Node dependencies, and start the React development server:
-
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Open your browser to **`http://localhost:5173`**. Register a new user account (which automatically provisions your initial organization and project) to access the dashboard.
+Open **`http://localhost:5173`** in your browser. Register an account to provision your workspace, create your first queue, and monitor live jobs.
 
 ---
 
-## 🧪 Automated Testing
-
-Pulse includes an automated test suite verifying atomic concurrency, retry budgets, and worker self-healing:
-
+## 🧪 Running Automated Tests
+To run the automated test suite against a real PostgreSQL instance:
 ```bash
 cd backend
 .\venv\Scripts\activate
-
-# Set test database environment variable
-set TEST_DATABASE_URL="postgresql+psycopg2://postgres:password@localhost:5432/pulse_test_db"
-
+export TEST_DATABASE_URL="postgresql+psycopg2://postgres:password@localhost:5432/pulse_test_db"
 pytest -v
 ```
-
----
-
-## 📖 REST API Summary
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/v1/auth/register` | `POST` | Register a new user account + default project |
-| `/api/v1/auth/login` | `POST` | Authenticate and receive JWT Bearer token |
-| `/api/v1/projects/{id}/queues` | `POST` / `GET` | Create or list project queues |
-| `/api/v1/projects/{id}/queues/{qid}/jobs` | `POST` / `GET` | Dispatch or query background jobs |
-| `/api/v1/workers/register` | `POST` | Register worker instance (`x-api-key` auth) |
-| `/api/v1/workers/{id}/claim` | `POST` | Atomically claim runnable jobs |
-| `/api/v1/projects/{id}/dead-letter` | `GET` | Inspect Dead Letter Queue entries |
-| `/api/v1/projects/{id}/dead-letter/{dlq_id}/replay` | `POST` | Replay DLQ job back to active queue |
-
----
-
-## 🔒 Security & Environment Notes
-- **API Keys:** Worker commands display masked API keys by default on the UI to prevent screenshot exposure.
-- **Git Protection:** `.env` files and internal development docs are excluded via `.gitignore`.
