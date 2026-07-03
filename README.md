@@ -21,11 +21,9 @@ Full architectural specifications, API schemas, and engineering rationale are or
 
 | Document | Description |
 |---|---|
-| [`docs/architecture.md`](docs/architecture.md) | High-level system topology, lifecycle diagrams, and concurrency design |
 | [`docs/api-documentation.md`](docs/api-documentation.md) | REST API endpoints, request/response schemas, and error codes |
 | [`docs/automated-tests.md`](docs/automated-tests.md) | Overview of the 14 automated unit/integration tests running against live PostgreSQL |
 | [`docs/design-decisions.md`](docs/design-decisions.md) | Deep dive into engineering tradeoffs, database locking semantics, and security choices |
-| [`docs/er-diagram.md`](docs/er-diagram.md) | Entity-Relationship schema definitions (`projects`, `queues`, `jobs`, `workers`, `dead_letter_jobs`) |
 
 ---
 
