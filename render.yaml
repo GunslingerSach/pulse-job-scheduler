@@ -1,0 +1,24 @@
+services:
+  # 1. FastAPI Backend Server
+  - type: web
+    name: pulse-backend
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+
+  # 2. Background Worker Process
+  - type: worker
+    name: pulse-worker
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.worker.runner --api-base https://pulse-backend.onrender.com --api-key $PROJECT_API_KEY --name render-cloud-worker --concurrency 10
+    envVars:
+      - key: PROJECT_API_KEY
+        sync: false
