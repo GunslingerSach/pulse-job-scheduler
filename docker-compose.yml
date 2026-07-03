@@ -1,0 +1,15 @@
+# Convenience compose file for local Postgres only. Run the API/worker/frontend
+# natively (see README.md) so `--reload` and worker restarts stay fast.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: scheduler
+      POSTGRES_PASSWORD: scheduler
+      POSTGRES_DB: job_scheduler
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
